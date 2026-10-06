@@ -20,20 +20,22 @@ export function TemporalEffects() {
 
   useFrame((_, dt) => {
     const f = runtime.frame;
-    const target = runtime.reducedMotion ? 0 : f.flare * 0.0045 + f.distort * 0.0012 + Math.min(f.speed, 6) * 0.00022;
+    const target = runtime.reducedMotion ? 0 : f.flare * 0.0045 + f.distort * 0.0012 + Math.abs(f.travel) * 0.0014;
     level.current = damp(level.current, target, 8, Math.min(dt, 0.1));
     offset.set(level.current, level.current * 0.6);
     if (aberration.current) aberration.current.offset = offset;
-    if (bloom.current) bloom.current.intensity = 0.9 + f.flare * 1.8;
+    if (bloom.current) bloom.current.intensity = 0.75 + f.flare * 1.8;
   });
 
   return (
-    <EffectComposer multisampling={4}>
-      <Bloom ref={bloom} mipmapBlur intensity={0.9} luminanceThreshold={0.42} luminanceSmoothing={0.3} radius={0.72} />
+    // No MSAA: hundreds of blended layers would pay for it per sample, and
+    // the membranes' edges are antialiased in the shader.
+    <EffectComposer multisampling={0}>
+      <Bloom ref={bloom} mipmapBlur intensity={0.75} luminanceThreshold={0.5} luminanceSmoothing={0.35} radius={0.75} />
       <ChromaticAberration ref={aberration} offset={offset} radialModulation modulationOffset={0.35} />
       <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
       <Vignette offset={0.22} darkness={0.82} />
-      <Noise premultiply opacity={0.55} blendFunction={BlendFunction.SCREEN} />
+      <Noise premultiply opacity={0.4} blendFunction={BlendFunction.SCREEN} />
     </EffectComposer>
   );
 }

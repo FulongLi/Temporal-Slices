@@ -1,14 +1,17 @@
 import { createContext, useContext, useSyncExternalStore } from "react";
-import type { ShaderMaterial } from "three";
 import {
   createTemporalStore,
+  createVolumeLayout,
+  dominantMoment,
   initialState,
-  LAYOUTS,
-  layoutForAspect,
+  sampleSlices,
+  Spring,
   TemporalNavigation,
+  TemporalWaves,
   transitionTiming,
+  type ObserverOrbit,
   type ObserverPose,
-  type SlicePlacement,
+  type SliceSampling,
   type TemporalDataset,
   type TemporalLayout,
   type TemporalState,
@@ -16,34 +19,52 @@ import {
   type TransitionTiming,
   type Vec3,
 } from "../engine";
-import { SliceTextureStore } from "./SliceTextureStore";
+import { TemporalVolumeTextures } from "../volume/TemporalVolumeTextures";
+
+/** Number of temporal slices the volume is built from. */
+export const SLICE_COUNT = 512;
+
+export interface FocusSlot {
+  /** Slice index, or -1 when empty. */
+  index: number;
+  /** 0 = resting in the block, 1 = extracted. */
+  amount: number;
+  spring: Spring;
+}
 
 /**
  * Per-frame state shared by the scene, outside React.
  *
  * Discrete interaction state (mode, focus, hover) lives in the store and
- * re-renders only the HUD. Continuous values (travel position, transition
- * progress, animated placements) change every frame and are read directly
- * from here inside useFrame, so the 3D field never re-renders React.
+ * re-renders only the HUD. Continuous values (travel position, focus
+ * extraction, waves, transition progress) change every frame and are read
+ * directly from here inside useFrame, so the 3D scene never re-renders React.
  */
 export interface TemporalRuntime {
   dataset: TemporalDataset;
   store: TemporalStore;
   navigation: TemporalNavigation;
-  textures: SliceTextureStore;
-  layouts: TemporalLayout[];
+  textures: TemporalVolumeTextures;
+  layout: TemporalLayout;
+  sampling: SliceSampling;
+  waves: TemporalWaves;
   reducedMotion: boolean;
   timing: TransitionTiming;
-  /** Pointer position in normalised device coordinates. */
-  pointer: { x: number; y: number };
-  /** Seconds since the field appeared. */
+  /** Pointer position in normalised device coordinates, and whether it is over the stage. */
+  pointer: { x: number; y: number; inside: boolean };
+  /** Where input wants the view to be (drag, pinch); the camera eases toward it. */
+  orbit: ObserverOrbit;
+  /** Seconds since the volume appeared. */
   clock: number;
-  /** Current animated placement of every slice (morphs between layouts). */
-  placements: SlicePlacement[];
-  /** Each slice's material, so the membrane can mirror the focused one. */
-  materials: (ShaderMaterial | null)[];
+  /** 0..1 as the volume assembles and the observer arrives. */
+  intro: number;
+  /**
+   * The extracted slice and, while focus moves elsewhere, the one sliding
+   * back into the block.
+   */
+  focus: { current: FocusSlot; previous: FocusSlot };
   transition: {
-    /** 0 = in the field, 1 = inside the moment. */
+    /** 0 = in the volume, 1 = inside the moment. */
     progress: number;
     /** Camera pose when the passage began. */
     start: ObserverPose | null;
@@ -53,41 +74,50 @@ export interface TemporalRuntime {
     sliceScale: number;
     entrySlope: number;
   };
-  /** Values computed by the camera each frame, for effects and HUD. */
-  frame: { flare: number; distort: number; speed: number };
-  layout(): TemporalLayout;
+  /** Values computed each frame, for shaders, effects and HUD. */
+  frame: { flare: number; distort: number; speed: number; travel: number };
+  /** The moment slice `index` mostly shows. */
+  momentOf(index: number): number;
 }
 
-export function createRuntime(dataset: TemporalDataset, options: { reducedMotion: boolean; baseUrl: string; start?: number }): TemporalRuntime {
-  const aspect = dataset.aspect ?? 1.6;
-  const layouts = LAYOUTS.map((layout) => layoutForAspect(layout, aspect));
+const slot = (): FocusSlot => ({ index: -1, amount: 0, spring: new Spring(0, 5.2, 0.92) });
+
+export function createRuntime(
+  dataset: TemporalDataset,
+  options: { reducedMotion: boolean; baseUrl: string; start?: number; count?: number },
+): TemporalRuntime {
+  const count = options.count ?? SLICE_COUNT;
+  const layout = createVolumeLayout({ count, aspect: dataset.aspect ?? 1.6 });
+  const sampling = sampleSlices(dataset, count);
   const start = options.start ?? 0;
-  const store = createTemporalStore(initialState(layouts[0].name, start));
+  const store = createTemporalStore(initialState(start));
   const navigation = new TemporalNavigation({
-    count: dataset.slices.length,
+    count,
     start,
-    stiffness: options.reducedMotion ? 22 : 6.5,
+    stiffness: options.reducedMotion ? 22 : 4.2,
+    // A full sweep through the block is roughly 4,000 px of scrolling.
+    wheelScale: count / 4000,
+    maxStep: count / 12,
   });
-  const runtime: TemporalRuntime = {
+  return {
     dataset,
     store,
     navigation,
-    textures: new SliceTextureStore(dataset, options.baseUrl),
-    layouts,
+    textures: new TemporalVolumeTextures(dataset, options.baseUrl),
+    layout,
+    sampling,
+    waves: new TemporalWaves({ count }),
     reducedMotion: options.reducedMotion,
     timing: transitionTiming(options.reducedMotion),
-    pointer: { x: 0, y: 0 },
+    pointer: { x: 0, y: 0, inside: false },
+    orbit: { yaw: 0, pitch: 0, zoom: 1 },
     clock: 0,
-    placements: dataset.slices.map((_, i) => layouts[0].placement(i)),
-    materials: dataset.slices.map(() => null),
+    intro: options.reducedMotion ? 1 : 0,
+    focus: { current: slot(), previous: slot() },
     transition: { progress: 0, start: null, center: null, normal: null, cover: 1, sliceScale: 1, entrySlope: 1 },
-    frame: { flare: 0, distort: 0, speed: 0 },
-    layout() {
-      const name = store.getState().layout;
-      return layouts.find((l) => l.name === name) ?? layouts[0];
-    },
+    frame: { flare: 0, distort: 0, speed: 0, travel: 0 },
+    momentOf: (index) => dominantMoment(sampling, index),
   };
-  return runtime;
 }
 
 export const RuntimeContext = createContext<TemporalRuntime | null>(null);

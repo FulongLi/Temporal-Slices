@@ -2,7 +2,7 @@
   "name": "temporal-slices",
   "private": true,
   "version": "0.1.0",
-  "description": "An experimental WebGL interface for navigating time as a spatial structure.",
+  "description": "An experimental WebGL interface in which hundreds of thin temporal slices form one navigable volume of time.",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "generate:demo": "node scripts/generate-lunar-city.mjs"
+    "import:images": "node scripts/import-images.mjs"
   },
   "engines": {
     "node": ">=20.19"

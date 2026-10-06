@@ -4,3 +4,7 @@ dist
 .DS_Store
 .vite
 coverage
+
+# Local imagery whose reuse rights are unclear (npm run import:images)
+public/local/
+src/data/local/
