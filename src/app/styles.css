@@ -1,0 +1,386 @@
+:root {
+  --bg: #020305;
+  --ink: #dfe9f7;
+  --ink-dim: rgba(205, 222, 245, 0.52);
+  --ink-faint: rgba(190, 210, 240, 0.28);
+  --glow: #9fcbff;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --sans: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+  --gutter: clamp(16px, 3.2vw, 44px);
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--mono);
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+}
+
+.stage {
+  position: fixed;
+  inset: 0;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.temporal-canvas {
+  position: absolute !important;
+  inset: 0;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ─── HUD ─────────────────────────────────────────────────────────── */
+
+.hud {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+
+/* A low veil of darkness behind the text, so it reads over any moment. */
+.hud::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: min(760px, 70vw);
+  height: min(560px, 75vh);
+  background: radial-gradient(ellipse at 0% 100%, rgba(2, 3, 5, 0.78), rgba(2, 3, 5, 0.4) 45%, transparent 72%);
+  opacity: 0.35;
+  transition: opacity 0.9s ease;
+}
+
+.hud.mode-focus::before,
+.hud.mode-inside::before {
+  opacity: 1;
+}
+
+.hud-archive {
+  position: absolute;
+  top: var(--gutter);
+  left: var(--gutter);
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  text-transform: uppercase;
+  transition: opacity 1.2s ease;
+}
+
+.hud-kicker {
+  color: var(--ink-faint);
+  font-size: 9.5px;
+  letter-spacing: 0.42em;
+}
+
+.hud-title {
+  font-size: 12px;
+  letter-spacing: 0.34em;
+}
+
+.hud-subtitle {
+  color: var(--ink-dim);
+  font-size: 10px;
+  letter-spacing: 0.26em;
+}
+
+.hud-index {
+  position: absolute;
+  top: var(--gutter);
+  right: var(--gutter);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 7px;
+  color: var(--ink-dim);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.24em;
+}
+
+.hud-index i {
+  font-style: normal;
+  color: var(--ink-faint);
+}
+
+.hud-layout {
+  color: var(--ink-faint);
+  font-size: 9.5px;
+  letter-spacing: 0.42em;
+  text-transform: uppercase;
+}
+
+.hud-moment {
+  position: absolute;
+  left: var(--gutter);
+  bottom: calc(var(--gutter) + 46px);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: min(440px, calc(100vw - 2 * var(--gutter)));
+}
+
+.hud-date {
+  font-size: clamp(30px, 4vw, 50px);
+  font-weight: 300;
+  letter-spacing: 0.06em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  text-shadow: 0 0 24px rgba(140, 190, 255, 0.25);
+}
+
+.hud-phase {
+  color: var(--ink-dim);
+  font-size: 10.5px;
+  letter-spacing: 0.4em;
+  text-transform: uppercase;
+}
+
+.hud-detail {
+  display: grid;
+  gap: 12px;
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  transform: translateY(8px);
+  transition:
+    opacity 0.7s ease,
+    transform 0.7s ease,
+    max-height 0.7s ease;
+}
+
+.hud-moment.is-examining .hud-detail {
+  max-height: 360px;
+  opacity: 1;
+  transform: none;
+  transition-delay: 0.15s;
+}
+
+.hud-detail h2 {
+  margin: 10px 0 0;
+  font-family: var(--sans);
+  font-weight: 300;
+  font-size: 19px;
+  letter-spacing: 0.02em;
+}
+
+.hud-detail p {
+  margin: 0;
+  max-width: 40ch;
+  color: var(--ink-dim);
+  font-family: var(--sans);
+  font-size: 13.5px;
+  line-height: 1.6;
+  letter-spacing: 0.01em;
+}
+
+.hud-detail dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 26px;
+  margin: 6px 0 0;
+}
+
+.hud-detail dt {
+  color: var(--ink-faint);
+  font-size: 9px;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+}
+
+.hud-detail dd {
+  margin: 4px 0 0;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The ruler: the whole archive at a glance, phases as faint spans. */
+.hud-ruler {
+  position: absolute;
+  left: var(--gutter);
+  right: var(--gutter);
+  bottom: var(--gutter);
+  height: 18px;
+  border-bottom: 1px solid rgba(160, 200, 255, 0.14);
+  transition: opacity 0.8s ease;
+}
+
+.hud-ruler.is-hidden {
+  opacity: 0;
+}
+
+.hud-segment {
+  position: absolute;
+  bottom: 6px;
+  height: 1px;
+  background: rgba(160, 200, 255, 0.12);
+  transition: background 0.6s ease;
+}
+
+.hud-segment.is-current {
+  background: rgba(170, 210, 255, 0.5);
+}
+
+.hud-tick {
+  position: absolute;
+  bottom: 0;
+  width: 1px;
+  height: 4px;
+  background: rgba(170, 205, 255, 0.3);
+}
+
+.hud-tick.is-focus {
+  height: 9px;
+  background: var(--glow);
+}
+
+.hud-marker {
+  position: absolute;
+  bottom: -3px;
+  width: 1px;
+  height: 21px;
+  background: #eef5ff;
+  box-shadow:
+    0 0 6px rgba(160, 205, 255, 0.9),
+    0 0 18px rgba(120, 180, 255, 0.5);
+}
+
+.hud-ruler-start,
+.hud-ruler-end {
+  position: absolute;
+  top: -12px;
+  color: var(--ink-faint);
+  font-size: 9px;
+  letter-spacing: 0.3em;
+}
+
+.hud-ruler-start {
+  left: 0;
+}
+
+.hud-ruler-end {
+  right: 0;
+}
+
+.hud-hint {
+  position: absolute;
+  right: var(--gutter);
+  top: calc(var(--gutter) + 52px);
+  text-align: right;
+  color: var(--ink-dim);
+  font-size: 10px;
+  letter-spacing: 0.38em;
+  text-transform: uppercase;
+  white-space: pre;
+  opacity: 0;
+  transition: opacity 1.4s ease;
+}
+
+.hud-hint.is-intro {
+  top: auto;
+  right: auto;
+  left: 50%;
+  bottom: calc(var(--gutter) + 46px);
+  transform: translateX(-50%);
+}
+
+.hud-hint.is-visible {
+  opacity: 1;
+  transition-delay: 1.6s;
+}
+
+/* Inside a moment, the archive's chrome recedes. */
+.hud.mode-inside .hud-archive,
+.hud.mode-inside .hud-index,
+.hud.mode-entering .hud-archive,
+.hud.mode-entering .hud-index {
+  opacity: 0.25;
+}
+
+.hud.mode-entering .hud-moment,
+.hud.mode-exiting .hud-moment {
+  opacity: 0.4;
+  transition: opacity 0.6s ease;
+}
+
+/* ─── Intro ───────────────────────────────────────────────────────── */
+
+.intro {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  background: var(--bg);
+  pointer-events: none;
+  transition: opacity 2.2s ease;
+}
+
+.intro.is-gone {
+  opacity: 0;
+}
+
+.intro-title {
+  font-size: 12px;
+  letter-spacing: 0.6em;
+  text-transform: uppercase;
+  animation: intro-in 1.6s ease both;
+}
+
+.intro-line {
+  color: var(--ink-dim);
+  font-family: var(--sans);
+  font-weight: 300;
+  font-size: 14px;
+  letter-spacing: 0.06em;
+  animation: intro-in 1.6s 0.5s ease both;
+}
+
+@keyframes intro-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+@media (max-width: 640px) {
+  .hud-index .hud-layout,
+  .hud-detail dl {
+    display: none;
+  }
+  .hud-hint {
+    white-space: normal;
+    max-width: 60vw;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.2s !important;
+  }
+}
