@@ -22,8 +22,6 @@ export interface TemporalState {
   present: number;
   /** Has the user moved yet? Drives the first-run hint. */
   interacted: boolean;
-  /** Name of the active spatial layout. */
-  layout: string;
 }
 
 export type TemporalEvent =
@@ -34,16 +32,14 @@ export type TemporalEvent =
   | { type: "travel" }
   | { type: "present"; index: number }
   | { type: "entered" }
-  | { type: "exited" }
-  | { type: "layout"; name: string };
+  | { type: "exited" };
 
-export const initialState = (layout: string, present = 0): TemporalState => ({
+export const initialState = (present = 0): TemporalState => ({
   mode: "observe",
   focus: null,
   hover: null,
   present,
   interacted: false,
-  layout,
 });
 
 const browsing = (mode: TemporalMode) => mode === "observe" || mode === "focus";
@@ -76,8 +72,6 @@ export function reduce(state: TemporalState, event: TemporalEvent): TemporalStat
       return state.mode === "entering" ? { ...state, mode: "inside" } : state;
     case "exited":
       return state.mode === "exiting" ? { ...state, mode: "focus" } : state;
-    case "layout":
-      return state.layout === event.name ? state : { ...state, layout: event.name };
   }
 }
 

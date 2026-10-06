@@ -1,123 +1,153 @@
-import { add, cross, normalize, scale, sub, vec3, type Vec3 } from "./math";
+import { add, clamp, lerp, normalize, scale, vec3, type Vec3 } from "./math";
+import { slicePose } from "./TemporalFocus";
 
 /**
- * TemporalLayout decides where every moment exists in space.
+ * TemporalLayout decides where time exists in space.
  *
- * A layout is a path through space parameterised by slice index: the slice
- * for index i stands on the path at i, facing back toward the past. The
- * observer (camera) is defined relative to the same path, so any path gives
- * a coherent field. The present position (a fractional index) is preserved
- * when switching layouts, so travelling and re-arranging are independent.
+ * Phase 2 has a single arrangement: a *volume*. Hundreds of thin slices
+ * stand parallel to the XY plane and are packed along Z, earliest at the
+ * front (+Z) and latest at the back, so the whole archive forms one cuboid.
+ * Slice positions are fractional so deformation, focus and travel can all
+ * be expressed as offsets measured in slices.
  */
-
-export interface SlicePlacement {
-  position: Vec3;
-  /** Rotation about the vertical axis, radians. 0 faces +Z. */
-  yaw: number;
-}
 
 export interface ObserverPose {
   position: Vec3;
   target: Vec3;
 }
 
+/** Small adjustments to the resting view: pointer sway, drag and pinch. */
+export interface ObserverOrbit {
+  /** Extra yaw, radians. */
+  yaw: number;
+  /** Extra pitch, radians. */
+  pitch: number;
+  /** Distance multiplier; < 1 is closer. */
+  zoom: number;
+}
+
+export const NO_ORBIT: ObserverOrbit = { yaw: 0, pitch: 0, zoom: 1 };
+
+export interface VolumeOptions {
+  /** Number of slices in the volume. */
+  count: number;
+  /** World distance between neighbouring slices. */
+  spacing: number;
+  /** World height of every slice; width follows the imagery's aspect. */
+  height: number;
+  aspect: number;
+  /** Resting view: oblique angle onto the volume and distance from it. */
+  view: { yaw: number; pitch: number; distance: number; ahead: number; follow: number };
+  /** Examining one slice: distance and how far the view swings round. */
+  focus: { distance: number; yaw: number; pitch: number; aim: number };
+}
+
 export interface TemporalLayout {
-  readonly name: string;
-  readonly label: string;
-  /** World size of one slice. */
+  readonly count: number;
+  readonly spacing: number;
   readonly sliceWidth: number;
   readonly sliceHeight: number;
-  readonly floorY: number;
-  placement(index: number): SlicePlacement;
+  /** Extent of the volume along its time axis. */
+  readonly depth: number;
+  /** Z of slice 0 (the earliest, frontmost slice). */
+  readonly frontZ: number;
+  /** Z of a fractional slice position. */
+  sliceZ(s: number): number;
+  /** Fractional slice position of a Z coordinate. */
+  sliceAt(z: number): number;
   /** Where the observer stands when the present is at `cursor`. */
-  observer(cursor: number): ObserverPose;
-  /** Where the observer stands to examine one slice. */
-  focusObserver(index: number): ObserverPose;
+  observer(cursor: number, orbit?: ObserverOrbit): ObserverPose;
+  /** Where the observer stands to examine one (extracted) slice. */
+  focusObserver(index: number, orbit?: ObserverOrbit): ObserverPose;
 }
 
-export interface PathLayoutOptions {
-  name: string;
-  label: string;
-  /** Point on the path for a fractional slice index. */
-  path: (s: number) => Vec3;
-  sliceWidth: number;
-  sliceHeight: number;
-  /** Slices turn slightly from the path normal toward the observer. */
-  sliceYaw: number;
-  observer: { back: number; side: number; height: number; ahead: number; targetSide: number; targetHeight: number };
-  /** `aim` shifts the gaze sideways so the focused slice sits right of centre. */
-  focus: { back: number; side: number; height: number; aim: number };
+export const DEFAULT_VOLUME: VolumeOptions = {
+  count: 512,
+  spacing: 0.032,
+  height: 5,
+  aspect: 1.6,
+  view: { yaw: 0.66, pitch: 0.2, distance: 21, ahead: 3.2, follow: 0.78 },
+  focus: { distance: 12.5, yaw: 0.5, pitch: 0.16, aim: 1.2 },
+};
+
+/** Unit vector for a yaw (about +Y, 0 = +Z) and a pitch (up). */
+export function direction(yaw: number, pitch: number): Vec3 {
+  const c = Math.cos(pitch);
+  return vec3(Math.sin(yaw) * c, Math.sin(pitch), Math.cos(yaw) * c);
 }
 
-const UP = vec3(0, 1, 0);
+export function createVolumeLayout(options: Partial<VolumeOptions> = {}): TemporalLayout {
+  const o: VolumeOptions = {
+    ...DEFAULT_VOLUME,
+    ...options,
+    view: { ...DEFAULT_VOLUME.view, ...options.view },
+    focus: { ...DEFAULT_VOLUME.focus, ...options.focus },
+  };
+  const depth = (o.count - 1) * o.spacing;
+  const frontZ = depth / 2;
+  const sliceWidth = o.height * o.aspect;
+  const sliceZ = (s: number) => frontZ - s * o.spacing;
 
-export function createPathLayout(options: PathLayoutOptions): TemporalLayout {
-  const { path } = options;
-  const frame = (s: number) => {
-    const point = path(s);
-    const tangent = normalize(sub(path(s + 0.01), path(s - 0.01)));
-    const right = normalize(cross(tangent, UP));
-    return { point, tangent, right };
-  };
-  const offset = (s: number, along: number, side: number, height: number) => {
-    const f = frame(s);
-    return add(add(add(f.point, scale(f.tangent, along)), scale(f.right, side)), scale(UP, height));
-  };
-  const lowest = Math.min(...Array.from({ length: 64 }, (_, i) => path(i).y));
-  return {
-    name: options.name,
-    label: options.label,
-    sliceWidth: options.sliceWidth,
-    sliceHeight: options.sliceHeight,
-    floorY: lowest - options.sliceHeight / 2 - 0.32,
-    placement(index) {
-      const f = frame(index);
-      return { position: f.point, yaw: Math.atan2(-f.tangent.x, -f.tangent.z) + options.sliceYaw };
+  const layout: TemporalLayout = {
+    count: o.count,
+    spacing: o.spacing,
+    sliceWidth,
+    sliceHeight: o.height,
+    depth,
+    frontZ,
+    sliceZ,
+    sliceAt: (z) => (frontZ - z) / o.spacing,
+    observer(cursor, orbit = NO_ORBIT) {
+      // The gaze follows the present into the block, but keeps some of the
+      // whole volume in view so it never stops reading as one object.
+      const present = sliceZ(clamp(cursor, 0, o.count - 1));
+      const z = lerp(0, present, o.view.follow) - o.view.ahead;
+      const target = vec3(0, -0.05 * o.height, z);
+      const eye = direction(o.view.yaw + orbit.yaw, o.view.pitch + orbit.pitch);
+      return { position: add(target, scale(eye, o.view.distance * orbit.zoom)), target };
     },
-    observer(cursor) {
-      const o = options.observer;
-      return {
-        position: offset(cursor, -o.back, o.side, o.height),
-        target: offset(cursor, o.ahead, o.targetSide, o.targetHeight),
-      };
-    },
-    focusObserver(index) {
-      const o = options.focus;
-      return { position: offset(index, -o.back, o.side, o.height), target: offset(index, 0, -o.aim, 0) };
+    focusObserver(index, orbit = NO_ORBIT) {
+      const pose = slicePose(layout, index, 1);
+      const yaw = Math.atan2(pose.normal.x, pose.normal.z) + o.focus.yaw + orbit.yaw * 0.5;
+      const eye = direction(yaw, o.focus.pitch + orbit.pitch * 0.5);
+      // Aim a little to the left of the slice so it sits right of centre,
+      // leaving the left of the frame for its date and title.
+      const left = normalize(vec3(-eye.z, 0, eye.x));
+      const target = add(pose.position, scale(left, -o.focus.aim));
+      return { position: add(target, scale(eye, o.focus.distance * orbit.zoom)), target };
     },
   };
+  return layout;
 }
 
-const SLICE_HEIGHT = 1.5;
-const SPACING = 1.15;
+// ─── Picking ────────────────────────────────────────────────────────────
 
-/** Straight time axis receding into depth, observed from slightly aside. */
-export const corridorLayout = createPathLayout({
-  name: "corridor",
-  label: "Axis",
-  path: (s) => vec3(0, 0, -s * SPACING),
-  sliceWidth: SLICE_HEIGHT * 1.6,
-  sliceHeight: SLICE_HEIGHT,
-  sliceYaw: -0.38,
-  observer: { back: 3.1, side: -2.0, height: 0.45, ahead: 2.0, targetSide: 0.85, targetHeight: -0.05 },
-  focus: { back: 3.3, side: -1.8, height: 0.14, aim: 0.22 },
-});
-
-/** The same moments carried on a slow meander, like a river of time. */
-export const driftLayout = createPathLayout({
-  name: "drift",
-  label: "Drift",
-  path: (s) => vec3(Math.sin(s * 0.19) * 2.4, Math.sin(s * 0.11 + 1) * 0.22, -s * SPACING * 1.08),
-  sliceWidth: SLICE_HEIGHT * 1.6,
-  sliceHeight: SLICE_HEIGHT,
-  sliceYaw: -0.3,
-  observer: { back: 3.3, side: -2.0, height: 0.55, ahead: 2.2, targetSide: 0.8, targetHeight: -0.05 },
-  focus: { back: 3.3, side: -1.8, height: 0.14, aim: 0.22 },
-});
-
-export const LAYOUTS: TemporalLayout[] = [corridorLayout, driftLayout];
-
-/** Rescale a layout's slices for imagery of a different aspect ratio. */
-export function layoutForAspect(layout: TemporalLayout, aspect: number): TemporalLayout {
-  return { ...layout, sliceWidth: layout.sliceHeight * aspect };
+/**
+ * The slice a ray points at: where the ray enters the visible part of the
+ * volume (slices `from`..count-1). Entering through the front face picks
+ * the present; entering through a side picks the slice at that depth.
+ * Returns null when the ray misses or starts inside the volume.
+ */
+export function pickSlice(layout: TemporalLayout, origin: Vec3, dir: Vec3, from = 0): number | null {
+  const first = clamp(from, 0, layout.count - 1);
+  const min = vec3(-layout.sliceWidth / 2, -layout.sliceHeight / 2, layout.sliceZ(layout.count - 1));
+  const max = vec3(layout.sliceWidth / 2, layout.sliceHeight / 2, layout.sliceZ(first));
+  let enter = -Infinity;
+  let exit = Infinity;
+  for (const axis of ["x", "y", "z"] as const) {
+    const o = origin[axis];
+    const d = dir[axis];
+    if (Math.abs(d) < 1e-9) {
+      if (o < min[axis] || o > max[axis]) return null;
+      continue;
+    }
+    let t0 = (min[axis] - o) / d;
+    let t1 = (max[axis] - o) / d;
+    if (t0 > t1) [t0, t1] = [t1, t0];
+    enter = Math.max(enter, t0);
+    exit = Math.min(exit, t1);
+  }
+  if (enter > exit || enter < 0) return null;
+  const z = origin.z + dir.z * enter;
+  return clamp(Math.round(layout.sliceAt(z)), Math.ceil(first), layout.count - 1);
 }

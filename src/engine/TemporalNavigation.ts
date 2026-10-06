@@ -6,7 +6,7 @@ import { clamp, Spring } from "./math";
  * Input moves a *target* position; the observed position follows it through
  * a critically damped spring, which gives travel weight: smooth acceleration,
  * smooth deceleration, no overshoot. When scrolling stops the target settles
- * on the nearest slice, so the present always comes to rest on a moment.
+ * on the nearest slice, so the present always comes to rest on one layer.
  */
 
 export interface NavigationOptions {
@@ -17,6 +17,8 @@ export interface NavigationOptions {
   wheelScale?: number;
   /** Milliseconds of wheel silence before settling on a slice. */
   settleDelay?: number;
+  /** Largest move a single wheel event may cause, in slices. */
+  maxStep?: number;
   start?: number;
 }
 
@@ -26,12 +28,14 @@ export class TemporalNavigation {
   private spring: Spring;
   private wheelScale: number;
   private settleDelay: number;
+  private maxStep: number;
   private lastWheel = -Infinity;
 
   constructor(options: NavigationOptions) {
     this.count = options.count;
     this.wheelScale = options.wheelScale ?? 1 / 340;
     this.settleDelay = options.settleDelay ?? 170;
+    this.maxStep = options.maxStep ?? 1.2;
     const start = clamp(options.start ?? 0, 0, this.max);
     this.target = start;
     this.spring = new Spring(start, options.stiffness ?? 6.5, 1);
@@ -58,8 +62,9 @@ export class TemporalNavigation {
 
   /** Continuous travel from a wheel or trackpad, in pixels. */
   scroll(deltaPixels: number, now = performance.now()) {
-    const delta = clamp(deltaPixels * this.wheelScale, -1.2, 1.2);
-    this.target = clamp(this.target + delta, -0.35, this.max + 0.35);
+    const delta = clamp(deltaPixels * this.wheelScale, -this.maxStep, this.maxStep);
+    const overshoot = this.maxStep * 0.3;
+    this.target = clamp(this.target + delta, -overshoot, this.max + overshoot);
     this.lastWheel = now;
   }
 

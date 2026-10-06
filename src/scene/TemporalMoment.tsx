@@ -1,11 +1,28 @@
 import { useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { MeshBasicMaterial, PlaneGeometry, type Group, type Mesh, type PerspectiveCamera, type Texture } from "three";
+import {
+  AddEquation,
+  Color,
+  CustomBlending,
+  GLSL3,
+  MeshBasicMaterial,
+  OneFactor,
+  OneMinusSrcAlphaFactor,
+  PlaneGeometry,
+  ShaderMaterial,
+  Vector2,
+  Vector3,
+  type Group,
+  type Mesh,
+  type PerspectiveCamera,
+  type Texture,
+} from "three";
 import { MEMBRANE_DISTANCE, MOMENT_DEPTH, lerp, momentPhase, smoothstep, SWAP_POINT } from "../engine";
+import fragmentShader from "../shaders/membrane.frag.glsl?raw";
+import vertexShader from "../shaders/membrane.vert.glsl?raw";
 import { Dust } from "./Dust";
 import { useRuntime, useTemporalState } from "./runtime";
 import { MOMENT_ORIGIN } from "./constants";
-import { copySliceUniforms, createSliceMaterial, uniformsOf } from "./sliceMaterial";
 
 /** Nearest and farthest layer distances from the resting camera. */
 const LAYER_NEAR = 3.6;
@@ -16,51 +33,72 @@ const OVERSCAN = 1.3;
 /**
  * The inside of a slice: a simple scene for one moment.
  *
- * The membrane is the slice surface again, sized so that from the moment
- * camera it covers the view exactly as the slice did in the field. Behind it
- * the moment's depth layers stand at increasing distances, so once the
- * camera passes through, the image opens into parallax space.
+ * The membrane is the entered slice again, sized so that from the moment
+ * camera it covers the view exactly as the slice did in the volume, and
+ * showing the same blend of moments. Behind it the dominant moment's depth
+ * layers stand at increasing distances, so once the camera passes through,
+ * the image opens into parallax space.
  */
 export function TemporalMoment() {
   const runtime = useRuntime();
+  const { layout, textures, sampling } = runtime;
   const focus = useTemporalState((s) => s.focus);
   const group = useRef<Group>(null);
   const membrane = useRef<Mesh>(null);
   const layerMeshes = useRef<(Mesh | null)[]>([]);
   const size = useThree((s) => s.size);
-  const layout = runtime.layout();
 
-  const [layers, setLayers] = useState<{ index: number; textures: Texture[] } | null>(null);
+  // Moments change slowly between neighbouring slices, so the depth layers
+  // are keyed by moment, not by slice.
+  const moment = focus === null ? null : runtime.momentOf(focus);
+  const [layers, setLayers] = useState<{ moment: number; textures: Texture[] } | null>(null);
   useEffect(() => {
-    if (focus === null) return;
+    if (moment === null) return;
     let alive = true;
-    runtime.textures
-      .layers(focus)
-      .then((textures) => alive && setLayers({ index: focus, textures }))
+    textures
+      .layers(moment)
+      .then((loaded) => alive && setLayers({ moment, textures: loaded }))
       .catch((error) => console.warn(error));
     return () => {
       alive = false;
     };
-  }, [focus, runtime]);
+  }, [moment, textures]);
 
-  const geometry = useMemo(() => new PlaneGeometry(layout.sliceWidth, layout.sliceHeight, 48, 24), [layout.sliceWidth, layout.sliceHeight]);
+  const geometry = useMemo(() => new PlaneGeometry(layout.sliceWidth, layout.sliceHeight, 48, 24), [layout]);
   const unit = useMemo(() => new PlaneGeometry(1, 1), []);
   const membraneMaterial = useMemo(
     () =>
-      createSliceMaterial({
-        blank: runtime.textures.blank,
-        width: layout.sliceWidth,
-        height: layout.sliceHeight,
-        seed: 0.5,
-        floorY: -1e6,
+      new ShaderMaterial({
+        glslVersion: GLSL3,
+        vertexShader,
+        fragmentShader,
+        uniforms: {
+          uTime: { value: 0 },
+          uSize: { value: new Vector2(layout.sliceWidth, layout.sliceHeight) },
+          uBend: { value: 0 },
+          uRipple: { value: 0 },
+          uImages: { value: textures.array },
+          uHighA: { value: textures.blank },
+          uHighB: { value: textures.blank },
+          uHighReady: { value: 0 },
+          uImage: { value: new Vector3() },
+          uVisibility: { value: 0 },
+          uFlare: { value: 0 },
+          uCold: { value: new Color("#8fb8ff") },
+        },
+        transparent: true,
+        depthWrite: false,
+        blending: CustomBlending,
+        blendEquation: AddEquation,
+        blendSrc: OneFactor,
+        blendDst: OneMinusSrcAlphaFactor,
+        premultipliedAlpha: true,
       }),
-    [runtime, layout.sliceWidth, layout.sliceHeight],
+    [layout, textures],
   );
   const layerMaterials = useMemo(
     () =>
-      (layers?.textures ?? []).map(
-        (map) => new MeshBasicMaterial({ map, transparent: true, depthWrite: false, toneMapped: true }),
-      ),
+      (layers?.textures ?? []).map((map) => new MeshBasicMaterial({ map, transparent: true, depthWrite: false, toneMapped: true })),
     [layers],
   );
   useEffect(() => () => layerMaterials.forEach((m) => m.dispose()), [layerMaterials]);
@@ -83,16 +121,24 @@ export function TemporalMoment() {
     const camera = state.camera as PerspectiveCamera;
     const m = momentPhase(T.progress, T.entrySlope);
 
-    // The membrane mirrors the focused slice, then reacts to contact.
-    const source = s.focus !== null ? runtime.materials[s.focus] : null;
-    if (source) copySliceUniforms(source, membraneMaterial);
-    const u = uniformsOf(membraneMaterial);
-    u.uDim.value = 0;
-    u.uFogDensity.value = 0;
+    // The membrane shows the same blend of moments as the entered slice.
+    const u = membraneMaterial.uniforms;
+    if (s.focus !== null) {
+      const i = s.focus;
+      const a = sampling.a[i];
+      const b = sampling.b[i];
+      u.uImage.value.set(a, b, sampling.blend[i]);
+      const ha = textures.high[a];
+      const hb = textures.high[b];
+      u.uHighA.value = ha ?? hb ?? textures.blank;
+      u.uHighB.value = hb ?? ha ?? textures.blank;
+      u.uHighReady.value = (sampling.blend[i] > 0.999 || ha) && (sampling.blend[i] < 0.001 || hb) ? 1 : 0;
+    }
+    u.uTime.value = runtime.clock;
     u.uVisibility.value = m.membrane;
     u.uFlare.value = m.flare * 0.65;
-    u.uRipple.value += m.ripple * 1.6;
-    u.uBend.value += m.ripple * 0.4;
+    u.uRipple.value = 0.2 + 1.3 + m.ripple * 1.6;
+    u.uBend.value = 0.35 + m.ripple * 0.4;
     if (membrane.current) {
       membrane.current.position.set(0, 0, -MEMBRANE_DISTANCE);
       membrane.current.scale.setScalar((T.sliceScale * MEMBRANE_DISTANCE) / T.cover);
@@ -116,7 +162,7 @@ export function TemporalMoment() {
     });
   });
 
-  const ready = layers && layers.index === focus;
+  const ready = layers && layers.moment === moment;
   return (
     <group ref={group} position={MOMENT_ORIGIN.toArray()} visible={false}>
       {ready &&

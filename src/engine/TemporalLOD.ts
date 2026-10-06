@@ -1,9 +1,14 @@
 import { clamp, smoothstep } from "./math";
 
 /**
- * Progressive disclosure. A slice's level of detail depends on how far it
- * lies from the present along the time axis, measured in slices.
+ * Progressive disclosure along the time axis. A moment's level of detail
+ * depends on how far it lies from the present, measured in moments.
  * Everything is continuous: levels blend rather than switch.
+ *
+ * In Phase 2 the volume shader discloses each slice by its own rules (screen
+ * spacing, the present, focus); this function decides which moments are worth
+ * holding at full resolution, so drawing a slice out of the block resolves
+ * without waiting.
  */
 
 export type LODLevel = "far" | "mid" | "near";

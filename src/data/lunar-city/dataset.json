@@ -1,0 +1,250 @@
+{
+  "id": "lunar-city",
+  "title": "Lunar Archive",
+  "subtitle": "Mare Serenitatis Settlement",
+  "description": "A fictional settlement on the Moon, observed at twelve moments across three centuries: founded, crowded, abandoned, overgrown and finally buried.",
+  "timeUnit": "year",
+  "aspect": 1.6,
+  "moments": [
+    {
+      "id": "slice-01",
+      "time": 2031.1973,
+      "timeLabel": "2031.03.14",
+      "title": "First Pressure Dome",
+      "description": "A single dome holds air on the floor of the mare. Eleven people sleep beneath it.",
+      "phase": "Foundation",
+      "image": "datasets/lunar-city/slice-01.svg",
+      "layers": [
+        "datasets/lunar-city/slice-01-l0.svg",
+        "datasets/lunar-city/slice-01-l1.svg",
+        "datasets/lunar-city/slice-01-l2.svg"
+      ],
+      "attributes": {
+        "Population": "11",
+        "Structural integrity": "100%",
+        "Regolith cover": "0.2 cm",
+        "Signal": "Beacon only"
+      }
+    },
+    {
+      "id": "slice-06",
+      "time": 2056.5765,
+      "timeLabel": "2056.07.30",
+      "title": "Vertical City",
+      "description": "Towers stand among the domes. Windows have begun to outnumber stars on the horizon.",
+      "phase": "Active Settlement",
+      "image": "datasets/lunar-city/slice-06.svg",
+      "layers": [
+        "datasets/lunar-city/slice-06-l0.svg",
+        "datasets/lunar-city/slice-06-l1.svg",
+        "datasets/lunar-city/slice-06-l2.svg"
+      ],
+      "attributes": {
+        "Population": "64,311",
+        "Structural integrity": "100%",
+        "Regolith cover": "0.2 cm",
+        "Signal": "Settlement network"
+      }
+    },
+    {
+      "id": "slice-09",
+      "time": 2071.1151,
+      "timeLabel": "2071.02.12",
+      "title": "Ring of Domes",
+      "description": "Outlying domes join the network. Tunnels connect every pressurised volume.",
+      "phase": "Expansion",
+      "image": "datasets/lunar-city/slice-09.svg",
+      "layers": [
+        "datasets/lunar-city/slice-09-l0.svg",
+        "datasets/lunar-city/slice-09-l1.svg",
+        "datasets/lunar-city/slice-09-l2.svg"
+      ],
+      "attributes": {
+        "Population": "164,221",
+        "Structural integrity": "100%",
+        "Regolith cover": "0.2 cm",
+        "Signal": "Settlement network"
+      }
+    },
+    {
+      "id": "slice-13",
+      "time": 2092.224,
+      "timeLabel": "2092.03.23",
+      "title": "Zenith",
+      "description": "The settlement's light is visible from Earth with the naked eye.",
+      "phase": "Peak Development",
+      "image": "datasets/lunar-city/slice-13.svg",
+      "layers": [
+        "datasets/lunar-city/slice-13-l0.svg",
+        "datasets/lunar-city/slice-13-l1.svg",
+        "datasets/lunar-city/slice-13-l2.svg"
+      ],
+      "attributes": {
+        "Population": "212,411",
+        "Structural integrity": "100%",
+        "Regolith cover": "0.2 cm",
+        "Signal": "Settlement network"
+      }
+    },
+    {
+      "id": "slice-18",
+      "time": 2121.5397,
+      "timeLabel": "2121.07.17",
+      "title": "The Rail Falls Silent",
+      "description": "The mass driver fires its last capsule. Orbit no longer needs what the Moon can give.",
+      "phase": "Decline",
+      "image": "datasets/lunar-city/slice-18.svg",
+      "layers": [
+        "datasets/lunar-city/slice-18-l0.svg",
+        "datasets/lunar-city/slice-18-l1.svg",
+        "datasets/lunar-city/slice-18-l2.svg"
+      ],
+      "attributes": {
+        "Population": "101,691",
+        "Structural integrity": "100%",
+        "Regolith cover": "0.2 cm",
+        "Signal": "Settlement network"
+      }
+    },
+    {
+      "id": "slice-22",
+      "time": 2145.9781,
+      "timeLabel": "2145.12.24",
+      "title": "Dark Windows",
+      "description": "The pad is empty. Only the spire's beacon still pulses, powered by a reactor no one tends.",
+      "phase": "Abandoned City",
+      "image": "datasets/lunar-city/slice-22.svg",
+      "layers": [
+        "datasets/lunar-city/slice-22-l0.svg",
+        "datasets/lunar-city/slice-22-l1.svg",
+        "datasets/lunar-city/slice-22-l2.svg"
+      ],
+      "attributes": {
+        "Population": "0",
+        "Structural integrity": "99%",
+        "Regolith cover": "0.3 cm",
+        "Signal": "Beacon only"
+      }
+    },
+    {
+      "id": "slice-25",
+      "time": 2166.6,
+      "timeLabel": "2166.08.08",
+      "title": "First Breach",
+      "description": "A tower leans. The eastern dome vents what little atmosphere it held.",
+      "phase": "Damaged Infrastructure",
+      "image": "datasets/lunar-city/slice-25.svg",
+      "layers": [
+        "datasets/lunar-city/slice-25-l0.svg",
+        "datasets/lunar-city/slice-25-l1.svg",
+        "datasets/lunar-city/slice-25-l2.svg"
+      ],
+      "attributes": {
+        "Population": "0",
+        "Structural integrity": "94%",
+        "Regolith cover": "5.1 cm",
+        "Signal": "Beacon only"
+      }
+    },
+    {
+      "id": "slice-29",
+      "time": 2200.3808,
+      "timeLabel": "2200.05.20",
+      "title": "Skeletons",
+      "description": "The small domes are reduced to their ribs. Solar fields are buried in grey.",
+      "phase": "Major Decay",
+      "image": "datasets/lunar-city/slice-29.svg",
+      "layers": [
+        "datasets/lunar-city/slice-29-l0.svg",
+        "datasets/lunar-city/slice-29-l1.svg",
+        "datasets/lunar-city/slice-29-l2.svg"
+      ],
+      "attributes": {
+        "Population": "0",
+        "Structural integrity": "77%",
+        "Regolith cover": "38.5 cm",
+        "Signal": "No signal"
+      }
+    },
+    {
+      "id": "slice-31",
+      "time": 2221.4959,
+      "timeLabel": "2221.07.01",
+      "title": "Escaped Gardens",
+      "description": "In the sheltered ruins, engineered hydroponic strains outlive their keepers and climb the walls.",
+      "phase": "Vegetation and Dust",
+      "image": "datasets/lunar-city/slice-31.svg",
+      "layers": [
+        "datasets/lunar-city/slice-31-l0.svg",
+        "datasets/lunar-city/slice-31-l1.svg",
+        "datasets/lunar-city/slice-31-l2.svg"
+      ],
+      "attributes": {
+        "Population": "0",
+        "Structural integrity": "63%",
+        "Regolith cover": "77.4 cm",
+        "Signal": "No signal"
+      }
+    },
+    {
+      "id": "slice-34",
+      "time": 2256.2951,
+      "timeLabel": "2256.04.18",
+      "title": "The Prime Dome Falls",
+      "description": "The oldest structure in the settlement collapses into its own foundations.",
+      "phase": "Structural Collapse",
+      "image": "datasets/lunar-city/slice-34.svg",
+      "layers": [
+        "datasets/lunar-city/slice-34-l0.svg",
+        "datasets/lunar-city/slice-34-l1.svg",
+        "datasets/lunar-city/slice-34-l2.svg"
+      ],
+      "attributes": {
+        "Population": "0",
+        "Structural integrity": "39%",
+        "Regolith cover": "1.65 m",
+        "Signal": "No signal"
+      }
+    },
+    {
+      "id": "slice-37",
+      "time": 2295.0219,
+      "timeLabel": "2295.01.09",
+      "title": "Drifts",
+      "description": "Regolith, stirred by ten thousand small impacts, settles over everything.",
+      "phase": "Ruins",
+      "image": "datasets/lunar-city/slice-37.svg",
+      "layers": [
+        "datasets/lunar-city/slice-37-l0.svg",
+        "datasets/lunar-city/slice-37-l1.svg",
+        "datasets/lunar-city/slice-37-l2.svg"
+      ],
+      "attributes": {
+        "Population": "0",
+        "Structural integrity": "15%",
+        "Regolith cover": "2.73 m",
+        "Signal": "No signal"
+      }
+    },
+    {
+      "id": "slice-40",
+      "time": 2351.7562,
+      "timeLabel": "2351.10.04",
+      "title": "Almost Nothing",
+      "description": "A shallow hollow in the mare, and Earth in the same place in the sky.",
+      "phase": "Almost Erased",
+      "image": "datasets/lunar-city/slice-40.svg",
+      "layers": [
+        "datasets/lunar-city/slice-40-l0.svg",
+        "datasets/lunar-city/slice-40-l1.svg",
+        "datasets/lunar-city/slice-40-l2.svg"
+      ],
+      "attributes": {
+        "Population": "0",
+        "Structural integrity": "0.3%",
+        "Regolith cover": "3.73 m",
+        "Signal": "No signal"
+      }
+    }
+  ]
+}

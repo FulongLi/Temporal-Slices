@@ -59,21 +59,20 @@ body,
   letter-spacing: 0.08em;
 }
 
-/* A low veil of darkness behind the text, so it reads over any moment. */
+/* A low veil of darkness behind the text, only while a moment is examined. */
 .hud::before {
   content: "";
   position: absolute;
   left: 0;
   bottom: 0;
   width: min(760px, 70vw);
-  height: min(560px, 75vh);
-  background: radial-gradient(ellipse at 0% 100%, rgba(2, 3, 5, 0.78), rgba(2, 3, 5, 0.4) 45%, transparent 72%);
-  opacity: 0.35;
+  height: min(620px, 80vh);
+  background: radial-gradient(ellipse at 0% 100%, rgba(2, 3, 5, 0.82), rgba(2, 3, 5, 0.42) 45%, transparent 72%);
+  opacity: 0;
   transition: opacity 0.9s ease;
 }
 
-.hud.mode-focus::before,
-.hud.mode-inside::before {
+.hud.is-examining::before {
   opacity: 1;
 }
 
@@ -85,6 +84,7 @@ body,
   flex-direction: column;
   gap: 7px;
   text-transform: uppercase;
+  opacity: 0.55;
   transition: opacity 1.2s ease;
 }
 
@@ -95,53 +95,42 @@ body,
 }
 
 .hud-title {
-  font-size: 12px;
+  color: var(--ink-dim);
+  font-size: 11px;
   letter-spacing: 0.34em;
 }
 
-.hud-subtitle {
-  color: var(--ink-dim);
-  font-size: 10px;
-  letter-spacing: 0.26em;
-}
-
-.hud-index {
-  position: absolute;
-  top: var(--gutter);
-  right: var(--gutter);
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 7px;
-  color: var(--ink-dim);
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.24em;
-}
-
-.hud-index i {
-  font-style: normal;
-  color: var(--ink-faint);
-}
-
-.hud-layout {
-  color: var(--ink-faint);
-  font-size: 9.5px;
-  letter-spacing: 0.42em;
-  text-transform: uppercase;
-}
-
+/* The present: invisible at rest, a faint running date while travelling,
+   the full record once a slice is drawn out of the block. */
 .hud-moment {
   position: absolute;
   left: var(--gutter);
-  bottom: calc(var(--gutter) + 46px);
+  bottom: var(--gutter);
   display: flex;
   flex-direction: column;
   gap: 10px;
   max-width: min(440px, calc(100vw - 2 * var(--gutter)));
+  opacity: 0;
+  transform: translateY(6px);
+  transition:
+    opacity 1.1s ease,
+    transform 1.1s ease;
+}
+
+.hud.is-travelling .hud-moment {
+  opacity: 0.55;
+  transform: none;
+  transition-duration: 0.35s;
+}
+
+.hud.is-examining .hud-moment {
+  opacity: 1;
+  transform: none;
+  transition-delay: 0.35s;
 }
 
 .hud-date {
-  font-size: clamp(30px, 4vw, 50px);
+  font-size: clamp(26px, 3.4vw, 44px);
   font-weight: 300;
   letter-spacing: 0.06em;
   font-variant-numeric: tabular-nums;
@@ -149,11 +138,12 @@ body,
   text-shadow: 0 0 24px rgba(140, 190, 255, 0.25);
 }
 
-.hud-phase {
-  color: var(--ink-dim);
-  font-size: 10.5px;
+.hud-index {
+  color: var(--ink-faint);
+  font-size: 9.5px;
   letter-spacing: 0.4em;
   text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
 }
 
 .hud-detail {
@@ -169,15 +159,23 @@ body,
     max-height 0.7s ease;
 }
 
-.hud-moment.is-examining .hud-detail {
-  max-height: 360px;
+.hud.is-examining .hud-detail {
+  max-height: 420px;
   opacity: 1;
   transform: none;
-  transition-delay: 0.15s;
+  transition-delay: 0.6s;
+}
+
+.hud-phase {
+  margin-top: 6px;
+  color: var(--ink-dim);
+  font-size: 10.5px;
+  letter-spacing: 0.4em;
+  text-transform: uppercase;
 }
 
 .hud-detail h2 {
-  margin: 10px 0 0;
+  margin: 0;
   font-family: var(--sans);
   font-weight: 300;
   font-size: 19px;
@@ -214,82 +212,15 @@ body,
   font-variant-numeric: tabular-nums;
 }
 
-/* The ruler: the whole archive at a glance, phases as faint spans. */
-.hud-ruler {
-  position: absolute;
-  left: var(--gutter);
-  right: var(--gutter);
-  bottom: var(--gutter);
-  height: 18px;
-  border-bottom: 1px solid rgba(160, 200, 255, 0.14);
-  transition: opacity 0.8s ease;
-}
-
-.hud-ruler.is-hidden {
-  opacity: 0;
-}
-
-.hud-segment {
-  position: absolute;
-  bottom: 6px;
-  height: 1px;
-  background: rgba(160, 200, 255, 0.12);
-  transition: background 0.6s ease;
-}
-
-.hud-segment.is-current {
-  background: rgba(170, 210, 255, 0.5);
-}
-
-.hud-tick {
-  position: absolute;
-  bottom: 0;
-  width: 1px;
-  height: 4px;
-  background: rgba(170, 205, 255, 0.3);
-}
-
-.hud-tick.is-focus {
-  height: 9px;
-  background: var(--glow);
-}
-
-.hud-marker {
-  position: absolute;
-  bottom: -3px;
-  width: 1px;
-  height: 21px;
-  background: #eef5ff;
-  box-shadow:
-    0 0 6px rgba(160, 205, 255, 0.9),
-    0 0 18px rgba(120, 180, 255, 0.5);
-}
-
-.hud-ruler-start,
-.hud-ruler-end {
-  position: absolute;
-  top: -12px;
-  color: var(--ink-faint);
-  font-size: 9px;
-  letter-spacing: 0.3em;
-}
-
-.hud-ruler-start {
-  left: 0;
-}
-
-.hud-ruler-end {
-  right: 0;
-}
-
 .hud-hint {
   position: absolute;
   right: var(--gutter);
-  top: calc(var(--gutter) + 52px);
+  bottom: var(--gutter);
   text-align: right;
   color: var(--ink-dim);
   font-size: 10px;
-  letter-spacing: 0.38em;
+  line-height: 1.9;
+  letter-spacing: 0.32em;
   text-transform: uppercase;
   white-space: pre;
   opacity: 0;
@@ -297,24 +228,21 @@ body,
 }
 
 .hud-hint.is-intro {
-  top: auto;
   right: auto;
   left: 50%;
-  bottom: calc(var(--gutter) + 46px);
   transform: translateX(-50%);
+  text-align: center;
 }
 
 .hud-hint.is-visible {
-  opacity: 1;
+  opacity: 0.8;
   transition-delay: 1.6s;
 }
 
 /* Inside a moment, the archive's chrome recedes. */
 .hud.mode-inside .hud-archive,
-.hud.mode-inside .hud-index,
-.hud.mode-entering .hud-archive,
-.hud.mode-entering .hud-index {
-  opacity: 0.25;
+.hud.mode-entering .hud-archive {
+  opacity: 0.2;
 }
 
 .hud.mode-entering .hud-moment,
@@ -366,13 +294,15 @@ body,
 }
 
 @media (max-width: 640px) {
-  .hud-index .hud-layout,
   .hud-detail dl {
     display: none;
   }
   .hud-hint {
     white-space: normal;
     max-width: 60vw;
+  }
+  .hud-hint.is-intro {
+    max-width: calc(100vw - 2 * var(--gutter));
   }
 }
 
