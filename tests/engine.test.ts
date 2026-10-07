@@ -410,3 +410,18 @@ describe("enter transition", () => {
     }
   });
 });
+
+describe("passage optics", () => {
+  it("is silent at rest, continuous at the swap and resolves inside", async () => {
+    const { passageOptics, SWAP_POINT: swap } = await import("../src/engine");
+    expect(passageOptics(0)).toEqual({ film: 0, spread: 0, dispersion: 0, interference: 0 });
+    const a = passageOptics(swap - 1e-4);
+    const b = passageOptics(swap + 1e-4);
+    for (const k of ["film", "spread", "dispersion", "interference"] as const) expect(Math.abs(a[k] - b[k])).toBeLessThan(0.01);
+    const peak = Math.max(...Array.from({ length: 200 }, (_, i) => passageOptics(swap + (i / 200) * (1 - swap)).interference));
+    expect(peak).toBeGreaterThan(0.9);
+    const inside = passageOptics(1);
+    expect(inside.interference).toBeLessThan(0.01);
+    expect(inside.film).toBeLessThan(0.01);
+  });
+});

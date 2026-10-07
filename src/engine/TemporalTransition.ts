@@ -112,6 +112,42 @@ export function momentPhase(p: number, entrySlope = 1): MomentPhase {
   return { q, cameraZ, toMembrane, membrane, flare, ripple };
 }
 
+/**
+ * The optics of the passage: crossing an optical boundary between states of
+ * time. Like the camera, everything is a function of p, so Escape plays it
+ * backward exactly.
+ *
+ *   1  the entered membrane becomes iridescent          film
+ *   2  thin-film colour spreads across it from the centre spread
+ *   3  dispersion rises around high-contrast features   dispersion
+ *   4  an interference field covers the viewport        interference
+ *   5  the camera passes through the membrane
+ *   6  colour resolves quickly back into the scene      (all fall after the crossing)
+ */
+export interface PassageOptics {
+  film: number;
+  spread: number;
+  dispersion: number;
+  interference: number;
+}
+
+export const NO_PASSAGE: PassageOptics = { film: 0, spread: 0, dispersion: 0, interference: 0 };
+
+export function passageOptics(p: number, entrySlope = 1): PassageOptics {
+  if (p <= 0) return { ...NO_PASSAGE };
+  const { toMembrane } = momentPhase(p, entrySlope);
+  // Beyond the membrane everything resolves within a few tenths of a unit.
+  const resolve = toMembrane < 0 ? Math.exp(-Math.pow(toMembrane / 0.3, 2)) : 1;
+  const approach = smoothstep(0.2, SWAP_POINT, p);
+  const contact = toMembrane >= 0 ? Math.exp(-Math.pow(toMembrane / 0.6, 2)) : resolve;
+  return {
+    film: smoothstep(0.02, 0.3, p) * resolve,
+    spread: smoothstep(0.1, 0.5, p),
+    dispersion: Math.max(approach * 0.55, contact) * resolve,
+    interference: contact * resolve,
+  };
+}
+
 /** Distance at which a w×h surface just covers a viewport (no edges visible). */
 export function coverDistance(width: number, height: number, fovDeg: number, aspect: number, overscan = 0.97) {
   const t = Math.tan((fovDeg * Math.PI) / 360);

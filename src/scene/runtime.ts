@@ -4,6 +4,7 @@ import {
   createVolumeLayout,
   dominantMoment,
   initialState,
+  NO_PASSAGE,
   sampleSlices,
   Spring,
   TemporalNavigation,
@@ -11,6 +12,7 @@ import {
   transitionTiming,
   type ObserverOrbit,
   type ObserverPose,
+  type PassageOptics,
   type SliceSampling,
   type TemporalDataset,
   type TemporalLayout,
@@ -20,6 +22,7 @@ import {
   type Vec3,
 } from "../engine";
 import { TemporalVolumeTextures } from "../volume/TemporalVolumeTextures";
+import type { SpectralQuality } from "../volume/SpectralLook";
 
 /** Number of temporal slices the volume is built from. */
 export const SLICE_COUNT = 512;
@@ -50,6 +53,8 @@ export interface TemporalRuntime {
   waves: TemporalWaves;
   reducedMotion: boolean;
   timing: TransitionTiming;
+  /** Optical quality; lowered by the performance monitor when the frame rate suffers. */
+  quality: SpectralQuality;
   /** Pointer position in normalised device coordinates, and whether it is over the stage. */
   pointer: { x: number; y: number; inside: boolean };
   /** Where input wants the view to be (drag, pinch); the camera eases toward it. */
@@ -75,7 +80,16 @@ export interface TemporalRuntime {
     entrySlope: number;
   };
   /** Values computed each frame, for shaders, effects and HUD. */
-  frame: { flare: number; distort: number; speed: number; travel: number };
+  frame: {
+    flare: number;
+    distort: number;
+    speed: number;
+    travel: number;
+    /** 0..1 how much the observer is moving (camera and travel), smoothed. */
+    motion: number;
+    /** Optics of the Enter Slice passage. */
+    optics: PassageOptics;
+  };
   /** The moment slice `index` mostly shows. */
   momentOf(index: number): number;
 }
@@ -84,7 +98,7 @@ const slot = (): FocusSlot => ({ index: -1, amount: 0, spring: new Spring(0, 5.2
 
 export function createRuntime(
   dataset: TemporalDataset,
-  options: { reducedMotion: boolean; baseUrl: string; start?: number; count?: number },
+  options: { reducedMotion: boolean; baseUrl: string; start?: number; count?: number; quality?: SpectralQuality },
 ): TemporalRuntime {
   const count = options.count ?? SLICE_COUNT;
   const layout = createVolumeLayout({ count, aspect: dataset.aspect ?? 1.6 });
@@ -109,13 +123,14 @@ export function createRuntime(
     waves: new TemporalWaves({ count }),
     reducedMotion: options.reducedMotion,
     timing: transitionTiming(options.reducedMotion),
+    quality: options.quality ?? "high",
     pointer: { x: 0, y: 0, inside: false },
     orbit: { yaw: 0, pitch: 0, zoom: 1 },
     clock: 0,
     intro: options.reducedMotion ? 1 : 0,
     focus: { current: slot(), previous: slot() },
     transition: { progress: 0, start: null, center: null, normal: null, cover: 1, sliceScale: 1, entrySlope: 1 },
-    frame: { flare: 0, distort: 0, speed: 0, travel: 0 },
+    frame: { flare: 0, distort: 0, speed: 0, travel: 0, motion: 0, optics: { ...NO_PASSAGE } },
     momentOf: (index) => dominantMoment(sampling, index),
   };
 }

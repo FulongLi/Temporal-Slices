@@ -1,5 +1,5 @@
 import { useFrame } from "@react-three/fiber";
-import { advanceProgress, clamp, computeLOD, fieldPhase, momentPosition } from "../engine";
+import { advanceProgress, clamp, computeLOD, fieldPhase, momentPosition, NO_PASSAGE, passageOptics } from "../engine";
 import { useRuntime } from "./runtime";
 
 /** Seconds for the volume to assemble and the observer to arrive. */
@@ -59,6 +59,10 @@ export function TemporalDirector() {
     transition.progress = advanceProgress(transition.progress, inward, dt, runtime.timing);
     if (s.mode === "entering" && transition.progress >= 1) store.dispatch({ type: "entered" });
     if (s.mode === "exiting" && transition.progress <= 0) store.dispatch({ type: "exited" });
+    // The passage's optics; with reduced motion, no flare or dispersion.
+    const optics = transition.progress > 0 ? passageOptics(transition.progress, transition.entrySlope) : { ...NO_PASSAGE };
+    if (runtime.reducedMotion) optics.dispersion = optics.interference = 0;
+    runtime.frame.optics = optics;
 
     // Full-resolution imagery for the moments the focused slice is made of,
     // and, once travel settles, for the moments around the present.

@@ -16,6 +16,7 @@ import fragmentShader from "../shaders/temporal-volume.frag.glsl?raw";
 import vertexShader from "../shaders/temporal-volume.vert.glsl?raw";
 import { EXTRACT, SEPARATION, type TemporalLayout } from "../engine";
 import { FOG_DENSITY } from "../scene/constants";
+import { SPECTRAL_LOOK, SPECTRAL_QUALITY, withSpectral, type SpectralQuality } from "./SpectralLook";
 
 /**
  * Look of the resting volume. One slice absorbs `absorb` of the light
@@ -41,6 +42,8 @@ export function exposureGain(meanLuminance: number | null) {
 }
 
 export const WAVE_SLOTS = 4;
+
+const L = SPECTRAL_LOOK;
 
 function volumeUniformsFor(options: { layout: TemporalLayout; images: Texture; blank: Texture }) {
   const { layout } = options;
@@ -77,10 +80,31 @@ function volumeUniformsFor(options: { layout: TemporalLayout; images: Texture; b
     uHighA: { value: options.blank },
     uHighB: { value: options.blank },
     uHighReady: { value: 0 },
-    uCold: { value: new Color("#8fb8ff") },
+    uCold: { value: new Color("#a9c3ea") },
     uLight: { value: new Vector3(-0.35, 0.75, 0.55).normalize() },
     uFogDensity: { value: FOG_DENSITY },
+
+    // Optics: see SPECTRAL_LOOK. Values that change per frame or with
+    // quality are written by TemporalVolume (and applyQuality).
+    uFilm: { value: new Vector4(L.iridescence, L.fresnelPower, L.filmThickness, L.depthPhase) },
+    uFilmLight: { value: new Vector2(L.filmGain, L.warmAccent) },
+    uHighlight: { value: new Vector2(L.highlight, L.sheen) },
+    uMotionOptics: { value: new Vector3(L.waveColour, L.breathing, L.motionBoost) },
+    uMotion: { value: 0 },
+    uNeighbour: { value: new Vector3(L.neighbour, L.neighbourReach, 0) },
+    uFocusFilm: { value: new Vector3(L.focusBoost, L.focusResidual, L.enterBoost) },
+    uPassage: { value: new Vector4() },
+    uRings: { value: L.passageRings },
+    uVolumeOptics: { value: new Vector3(L.bands, L.caustics, L.dispersion) },
   };
+}
+
+/** Switch optional optical features for a quality level. */
+export function applyQuality(material: ShaderMaterial, quality: SpectralQuality) {
+  const q = SPECTRAL_QUALITY[quality];
+  const u = volumeUniforms(material);
+  u.uMotionOptics.value.x = L.waveColour * q.waveColour;
+  u.uVolumeOptics.value.set(L.bands * q.bands, L.caustics * q.caustics, L.dispersion * q.dispersion);
 }
 
 export type VolumeUniforms = ReturnType<typeof volumeUniformsFor>;
@@ -89,8 +113,8 @@ export type VolumeUniforms = ReturnType<typeof volumeUniformsFor>;
 export function createVolumeMaterial(options: { layout: TemporalLayout; images: Texture; blank: Texture }) {
   return new ShaderMaterial({
     glslVersion: GLSL3,
-    vertexShader,
-    fragmentShader,
+    vertexShader: withSpectral(vertexShader),
+    fragmentShader: withSpectral(fragmentShader),
     uniforms: volumeUniformsFor(options),
     transparent: true,
     depthWrite: false,
