@@ -8,6 +8,12 @@ Hundreds of extremely thin slices of time are packed into one translucent block.
 
 Inspired by the temporal archive concept from *Moon Dark Side* (月球暗面).
 
+## Live Demo
+
+https://fulongli.github.io/Temporal-Slices/
+
+Every push to `main` automatically deploys the latest build to GitHub Pages (see [Deployment](#deployment)).
+
 ---
 
 ## Concept
@@ -48,6 +54,19 @@ Open the printed URL (default http://localhost:5173).
 | `npm run import:images -- <folder> --id <id>` | Turn a folder of images into a local, untracked dataset (see below) |
 
 URL parameters: `?dataset=<id>` picks an archive; `?slices=<n>` changes the slice count (default 512); `?quality=high|medium|low` sets the optical quality (default `high`).
+
+### Deployment
+
+Every push to `main` automatically deploys the latest build to GitHub Pages. [`.github/workflows/deploy-pages.yml`](.github/workflows/deploy-pages.yml) runs `npm ci`, `npm test` and `npm run build` with `VITE_BASE_PATH=/Temporal-Slices/`, then publishes `dist/` with the official Pages actions; it can also be run by hand (`workflow_dispatch`). The repository's Pages source must be set to **GitHub Actions** (Settings → Pages), not a branch.
+
+Locally the base stays `/`. To check the Pages build under its subpath:
+
+```bash
+VITE_BASE_PATH=/Temporal-Slices/ npm run build
+npx vite preview --base /Temporal-Slices/
+```
+
+Local, untracked imagery (`public/local/`, `src/data/local/`) is never published: production builds drop it unless `VITE_INCLUDE_LOCAL=1`, and CI never has it.
 
 ## Controls
 

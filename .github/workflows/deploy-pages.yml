@@ -12,7 +12,8 @@ permissions:
 
 concurrency:
   group: "pages"
-  cancel-in-progress: true
+  # Let an in-progress deployment finish; newer queued runs replace older queued ones.
+  cancel-in-progress: false
 
 jobs:
   deploy:
