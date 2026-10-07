@@ -23,6 +23,9 @@ function excludeLocalImagery(): Plugin {
 }
 
 export default defineConfig({
+  // GitHub Pages serves this project from /Temporal-Slices/. Keep local
+  // development at / and let the deployment workflow opt into the repo path.
+  base: process.env.VITE_BASE_PATH || "/",
   plugins: [react(), excludeLocalImagery()],
   server: { port: Number(process.env.PORT) || 5173 },
   build: {
