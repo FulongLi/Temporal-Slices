@@ -2,7 +2,6 @@ import { useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AddEquation,
-  Color,
   CustomBlending,
   GLSL3,
   MeshBasicMaterial,
@@ -12,6 +11,7 @@ import {
   ShaderMaterial,
   Vector2,
   Vector3,
+  Vector4,
   type Group,
   type Mesh,
   type PerspectiveCamera,
@@ -20,6 +20,7 @@ import {
 import { MEMBRANE_DISTANCE, MOMENT_DEPTH, lerp, momentPhase, smoothstep, SWAP_POINT } from "../engine";
 import fragmentShader from "../shaders/membrane.frag.glsl?raw";
 import vertexShader from "../shaders/membrane.vert.glsl?raw";
+import { SPECTRAL_LOOK, SPECTRAL_QUALITY, withSpectral } from "../volume/SpectralLook";
 import { Dust } from "./Dust";
 import { useRuntime, useTemporalState } from "./runtime";
 import { MOMENT_ORIGIN } from "./constants";
@@ -71,7 +72,7 @@ export function TemporalMoment() {
       new ShaderMaterial({
         glslVersion: GLSL3,
         vertexShader,
-        fragmentShader,
+        fragmentShader: withSpectral(fragmentShader),
         uniforms: {
           uTime: { value: 0 },
           uSize: { value: new Vector2(layout.sliceWidth, layout.sliceHeight) },
@@ -83,8 +84,8 @@ export function TemporalMoment() {
           uHighReady: { value: 0 },
           uImage: { value: new Vector3() },
           uVisibility: { value: 0 },
-          uFlare: { value: 0 },
-          uCold: { value: new Color("#8fb8ff") },
+          uOptics: { value: new Vector4() },
+          uWarmth: { value: SPECTRAL_LOOK.warmAccent },
         },
         transparent: true,
         depthWrite: false,
@@ -136,7 +137,16 @@ export function TemporalMoment() {
     }
     u.uTime.value = runtime.clock;
     u.uVisibility.value = m.membrane;
-    u.uFlare.value = m.flare * 0.65;
+    // The same film as the entered slice had at the swap (see the volume's
+    // vertex shader), turning to interference as the camera meets it.
+    const o = runtime.frame.optics;
+    const L = SPECTRAL_LOOK;
+    u.uOptics.value.set(
+      L.focusResidual + o.film * L.passageFilm * L.enterBoost,
+      o.spread,
+      o.spread * L.passageRings + o.interference * 0.5 * L.enterBoost,
+      o.dispersion * L.passageDispersion * L.enterBoost * L.dispersion * SPECTRAL_QUALITY[runtime.quality].dispersion,
+    );
     u.uRipple.value = 0.2 + 1.3 + m.ripple * 1.6;
     u.uBend.value = 0.35 + m.ripple * 0.4;
     if (membrane.current) {

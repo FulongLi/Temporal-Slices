@@ -5,6 +5,7 @@ import { createRuntime, RuntimeContext } from "../scene/runtime";
 import { TemporalScene } from "../scene/TemporalScene";
 import { TemporalHUD, TemporalIntro } from "../ui/TemporalHUD";
 import { useTemporalInput } from "../ui/useTemporalInput";
+import { parseQuality } from "../volume/SpectralLook";
 
 const prefersReducedMotion = () => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
 
@@ -15,7 +16,12 @@ export function App({ registry }: { registry: DatasetRegistry }) {
     const requested = params.get("dataset") ?? defaultId;
     const dataset = normalizeDataset(datasets[requested] ?? datasets[defaultId]);
     const count = Number(params.get("slices")) || undefined;
-    return createRuntime(dataset, { reducedMotion: prefersReducedMotion(), baseUrl: import.meta.env.BASE_URL, count });
+    return createRuntime(dataset, {
+      reducedMotion: prefersReducedMotion(),
+      baseUrl: import.meta.env.BASE_URL,
+      count,
+      quality: parseQuality(params.get("quality")),
+    });
   }, [registry]);
 
   useEffect(() => {

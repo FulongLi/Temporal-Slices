@@ -1,6 +1,6 @@
 import { useFrame } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
-import { Vector2, type Mesh, type PerspectiveCamera } from "three";
+import { Vector2, Vector3, type Mesh, type PerspectiveCamera } from "three";
 import {
   clamp,
   damp,
@@ -17,7 +17,8 @@ import {
 } from "../engine";
 import { useRuntime } from "../scene/runtime";
 import { createVolumeGeometry } from "./TemporalVolumeGeometry";
-import { createVolumeMaterial, exposureGain, volumeUniforms, WAVE_SLOTS } from "./TemporalVolumeMaterial";
+import { applyQuality, createVolumeMaterial, exposureGain, volumeUniforms, WAVE_SLOTS } from "./TemporalVolumeMaterial";
+import { SPECTRAL_LOOK, type SpectralQuality } from "./SpectralLook";
 
 /**
  * The whole archive as one object: every slice of the volume in a single
@@ -44,8 +45,11 @@ export function TemporalVolume() {
 
   const waves = useMemo(() => new Float32Array(WAVE_SLOTS * 4), []);
   const ndc = useMemo(() => new Vector2(), []);
+  const direction = useMemo(() => new Vector3(), []);
   const hover = useRef({ index: -1, spring: new Spring(0, 9, 1) });
   const high = useRef(0);
+  const quality = useRef<SpectralQuality | null>(null);
+  const lastView = useRef<{ position: Vector3; direction: Vector3 } | null>(null);
 
   useFrame((state, rawDt) => {
     const dt = Math.min(rawDt, 0.1);
@@ -76,6 +80,23 @@ export function TemporalVolume() {
 
     runtime.waves.write(waves);
     u.uWaves.value.forEach((v, i) => v.fromArray(waves, i * 4));
+
+    // Optics. Colour answers movement: the observer's own motion (camera
+    // translation and turning) and travel through time, smoothed.
+    if (quality.current !== runtime.quality) applyQuality(material, (quality.current = runtime.quality));
+    const view = lastView.current ?? (lastView.current = { position: camera.position.clone(), direction: new Vector3() });
+    camera.getWorldDirection(direction);
+    if (view.direction.lengthSq() === 0) view.direction.copy(direction);
+    const moving =
+      rawDt > 0
+        ? camera.position.distanceTo(view.position) / rawDt / 9 + direction.angleTo(view.direction) / rawDt / 0.6 + Math.abs(runtime.frame.travel)
+        : 0;
+    view.position.copy(camera.position);
+    view.direction.copy(direction);
+    runtime.frame.motion = damp(runtime.frame.motion, runtime.reducedMotion ? 0 : clamp(moving), 2.5, dt);
+    u.uMotion.value = runtime.frame.motion;
+    const o = runtime.frame.optics;
+    u.uPassage.value.set(o.film * SPECTRAL_LOOK.passageFilm, o.spread, o.dispersion * SPECTRAL_LOOK.passageDispersion, o.interference);
 
     u.uFocus.value.set(cur.index, cur.index >= 0 ? cur.amount : 0, prev.index, prev.index >= 0 ? prev.amount : 0);
     u.uFocusScale.value.set(1 + FOCUS_GROW * cur.amount + (passage ? ENTER_GROW * phase.lift : 0), 1 + FOCUS_GROW * prev.amount);

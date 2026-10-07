@@ -47,7 +47,7 @@ Open the printed URL (default http://localhost:5173).
 | `npm test` | Engine and dataset tests (Vitest) |
 | `npm run import:images -- <folder> --id <id>` | Turn a folder of images into a local, untracked dataset (see below) |
 
-URL parameters: `?dataset=<id>` picks an archive; `?slices=<n>` changes the slice count (default 512).
+URL parameters: `?dataset=<id>` picks an archive; `?slices=<n>` changes the slice count (default 512); `?quality=high|medium|low` sets the optical quality (default `high`).
 
 ## Controls
 
@@ -104,6 +104,23 @@ All motion is large-scale and collective. It is computed in the vertex shader as
 
 Unchanged in principle from Phase 1 (`engine/TemporalTransition.ts`). One progress value drives the whole passage. The rest of the block dims; the camera closes in on the extracted slice until it covers the viewport; at the swap point the scene changes to the moment's own space, where a membrane showing the same blend of moments covers the view identically; the camera continues through it into the moment's depth layers. `Esc` runs the same curves backward.
 
+### Optics (Phase 3)
+
+> Temporal glass should not merely reflect light. It should separate, bend and carry light through time.
+
+The block is no longer plain cold glass. At rest it stays mostly silver, black and pale blue; colour comes from viewing angle, movement, waves, focus and the passage.
+
+- **Thin film.** Each membrane reflects a thin-film colour that depends on the view angle (the optical path through a film of index ~1.45, mapped through a cool-biased palette: deep blue, violet, cyan, pale green, then brief gold and magenta). Facing the block it is nearly transparent silver; toward grazing angles violet, cyan and green appear, and the colour shifts continuously as the camera moves. A slowly flowing film thickness and a drift through depth keep it from reading as one flat tint.
+- **Colour from density.** The film is scaled by each slice's absorption, so one membrane barely tints, dozens make a faint haze, and hundreds become an optical body. It does not depend on how bright an archive's imagery is.
+- **Waves carry light.** A passing wave carries a spectral pulse: violet ahead of the packet, cyan at its centre, gold behind, then fading back to silver. Breathing drifts the phase very slightly; camera movement and travel bring the colour up, and it calms again at rest.
+- **Highlights.** A narrow anisotropic streak whose colour spreads across its width, and a soft silver reflection at grazing angles. Both accumulate where many layers overlap.
+- **Light inside.** One wide cyan-violet band drifts slowly through the volume, and now and then a thin gold one appears at grazing angles. Faint caustics run through the body while it is disturbed, and a faint caustic glow lies in the dark beneath it (an invisible receiving plane, additive, with no edges).
+- **Dispersion.** Edges separate into a fine fringe (red outermost) where hundreds of them merge at the silhouette. The clearest slices (present, hover, extracted) separate red and blue slightly around high-contrast features.
+- **Focus.** The extracted slice's edge turns iridescent, a front of colour crosses it, and the image resolves beneath the film, leaving a faint iridescent frame. The neighbours on either side shift phase in opposite directions, fading with distance, so the extraction disturbs the surrounding medium.
+- **The passage** (`passageOptics` in `engine/TemporalTransition.ts`): the membrane becomes iridescent; interference spreads from its centre; dispersion rises; as the camera meets the membrane an interference field (Newton's rings, bent by the image) covers the view; then colour resolves back into the moment. There is no white flash, and `Esc` plays it backward. With reduced motion, the field and dispersion are off.
+
+All of it is tuned from one object, `SPECTRAL_LOOK` in `volume/SpectralLook.ts`. The shared shader functions (`fresnelTerm`, `spectralPalette`, `thinFilmColor`, `spectralBand`, `causticField`, `membraneFilm`) live in `shaders/spectral.glsl`.
+
 ## Architecture
 
 ```
@@ -133,11 +150,16 @@ src/
 │   ├── TemporalVolume.tsx       engine state → uniforms, pointer picking
 │   ├── TemporalVolumeGeometry.ts  instanced plane, per-instance attributes, draw order
 │   ├── TemporalVolumeMaterial.ts  the shared material, look constants, exposure
-│   └── TemporalVolumeTextures.ts  texture array of moments, high-res and depth layers
+│   ├── TemporalVolumeTextures.ts  texture array of moments, high-res and depth layers
+│   ├── SpectralLook.ts            SPECTRAL_LOOK (optics tuning), quality levels
+│   └── TemporalCaustics.tsx       faint caustic light beneath the block
 ├── shaders/
-│   ├── temporal-volume.vert.glsl  waves, compression, gap, extraction, appearance
-│   ├── temporal-volume.frag.glsl  image interpolation, memory, edges, absorption
+│   ├── spectral.glsl              shared optics: Fresnel, palette, thin film, bands, caustics, membrane film
+│   ├── temporal-volume.vert.glsl  waves, compression, gap, extraction, appearance, optics
+│   ├── temporal-volume.frag.glsl  image interpolation, memory, edges, absorption, focus film
 │   ├── membrane.*.glsl            the surface crossed when entering a slice
+│   ├── spectral-boundary.frag.glsl  screen-space dispersion and the passage's interference field
+│   ├── caustics.*.glsl
 │   └── dust.*.glsl
 ├── scene/                       ← R3F scene; knows nothing about lunar cities
 │   ├── runtime.ts               per-frame shared state + React context
@@ -146,7 +168,8 @@ src/
 │   ├── TemporalCamera.tsx       arrival, oblique rest, focus, passage, inside
 │   ├── TemporalEnvironment.tsx  darkness and a sparse haze of motes
 │   ├── TemporalMoment.tsx       the inside of a slice: membrane + depth layers
-│   └── TemporalEffects.tsx      bloom, chromatic separation (only in motion), tone mapping, grain
+│   ├── TemporalEffects.tsx      bloom, spectral boundary, tone mapping, grain
+│   └── SpectralBoundaryEffect.ts  post effect: wavelengths separating in motion, the passage's interference
 ├── ui/                          HUD and input
 └── data/                        dataset registry; lunar-city/dataset.json
 scripts/import-images.mjs        folder of images → local dataset
@@ -159,7 +182,8 @@ archive/phase-1/                 the Phase 1 demo generator, for reference
 - **Draw order.** Slices are translucent and blended without depth writes, so they are drawn back to front. For parallel planes that order depends only on the camera's position along the time axis, so the instance → slice assignment is re-permuted only when the camera crosses a slice.
 - **One texture.** All moments live in one `DataArrayTexture` (1024 px long edge, mipmapped), filled nearest-moment-first. The interpolation between moments happens in the fragment shader, so no blended images are ever generated or stored. Full-resolution textures exist only for the two moments of the focused slice, plus the moments nearest the present once travel settles (decided by `TemporalLOD`).
 - **Light.** Output is premultiplied (rgb = emitted light, alpha = absorption) into the composer's half-float buffer, which hundreds of faint layers need to accumulate without banding. Emission adapts to the archive's mean luminance (square-root law), so bright imagery does not burn the block out to white.
-- **Cheap fragments.** The fragment shader runs hundreds of times per pixel, so everything that varies slowly across a slice (disclosure, fog, the glass highlight, edge weighting) is computed per vertex. Fully dissolved slices collapse to a point and cost nothing.
+- **Cheap fragments.** The fragment shader runs hundreds of times per pixel, so everything that varies slowly across a slice (disclosure, fog, thin film, highlights, bands, caustics, edge weighting) is computed per vertex, and per-slice optics are `flat`. The rim takes its colour from the hue of the slice's own film instead of an extra varying (on tile-based GPUs every varying is re-read per tile). Only the few slices looked at closely (present, hover, extracted) take one branch for full resolution, image dispersion and the focus film. Fully dissolved slices collapse to a point and cost nothing.
+- **Quality levels.** `high`: everything. `medium`: no internal bands, caustics or image dispersion. `low`: Fresnel spectral tint only (no wave colour either). `PerformanceMonitor` lowers the pixel ratio first, then the quality, and restores them in the reverse order.
 
 ### Performance
 
@@ -174,6 +198,7 @@ Measured in the dev server on an Apple M4 (embedded browser, 1024×768 CSS px vi
 - CPU work per frame is about 1.3 ms. The volume is fill-bound: its cost scales with pixels × visible slices. Moving per-fragment work into the vertex shader cut it by ~30%.
 - The canvas starts at DPR 1.5 at most, and `PerformanceMonitor` lowers it toward 1 when frames fall short. Expect DPR ≈ 1–1.25 at full screen on a laptop.
 - GPU memory: ~2.6 MB per moment in the array (plus mips), at most six full-resolution moment textures, and two sets of depth layers.
+- **Phase 3 optics.** Scene pass only (the volume and caustics, no post-processing), rendered into an offscreen 32-bit float target with a forced readback, 1000×700 CSS px, lunar-city at rest. Phase 2: 5.1 ms at DPR 1 and 8.3 ms at DPR 1.5. Phase 3 at `high`: about 5.7 ms and 10.5 ms (+12% and +27%). At rest `medium` and `low` cost about the same as `high`, because the optional terms only run where the medium is disturbed. The first version cost +70–90% before per-fragment work was moved to vertices and varyings were cut.
 - Not yet measured: full-screen 60 fps under real `requestAnimationFrame` (the embedded browser used for this work was a hidden pane, so frames were timed synchronously). Check this on the target machine.
 
 ## Datasets
@@ -242,6 +267,28 @@ This copies the images to `public/local/<id>/` and writes `src/data/local/<id>/d
 | GPU-efficient rendering | 1 draw call, 1 material, 1 texture array |
 | `npm run build` succeeds | Yes |
 | Smooth in a desktop browser | See Performance: adaptive DPR; full-screen 60 fps to be confirmed on hardware |
+
+## Phase 3 status
+
+| Acceptance criterion | Status |
+| --- | --- |
+| No longer ordinary blue transparent glass | Silver-black body with thin-film colour |
+| Viewing angle affects spectral colour | Thin-film phase from the refracted path; continuous with camera motion |
+| Grazing angles: controlled violet / cyan / gold | Fresnel-gated, cool-biased palette; warm keys brief |
+| Default volume mostly neutral | Colour gated by Fresnel, motion and waves |
+| Not a generic RGB rainbow | Nonuniform palette, silver at normal incidence |
+| Waves carry a spectral pulse | Violet ahead, cyan centre, gold behind; caustics follow |
+| Layer density contributes | Film scaled by absorption, accumulates through depth |
+| Subtle dispersion at high-contrast edges | Edge fringe; R/B separation on the clearest slices |
+| Internal light bands | One wide drifting band, one rare thin gold band |
+| Focused slice iridescent before the image resolves | Edge, then a colour front, then the image beneath the film |
+| Neighbours react to extraction | Opposite phase shifts on each side, exponential falloff |
+| Enter Slice interference boundary | Film, spreading interference, dispersion, viewport field, resolve |
+| Images readable during focus | Faint residual film only, after the image resolves |
+| Performance | One draw call kept; +12% / +27% scene cost; adaptive quality |
+| `npm run build` | Succeeds |
+| Interaction and state machine | Unchanged |
+| No volume architecture rewrite | Same instancing, material and texture array |
 
 ## Roadmap
 
